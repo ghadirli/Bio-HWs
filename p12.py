@@ -54,9 +54,9 @@ def find_isolated_cycles(graph):
     return cycles
 
 
-
 def get_cycle(graph, v, visited):
     w = v
+
     path = [w]
     while my_utils.is_1_in_1_out(graph, w):
         visited.append(w)
