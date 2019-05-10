@@ -44,7 +44,7 @@ def print_path(path):
 
 
 def get_best_path(source, sink, graph):
-    sorted_graph = topological_sort(graph)
+    sorted_graph = topological_sort(graph, -222)
 
     z = sorted_graph.index(source)
     del sorted_graph[z]
