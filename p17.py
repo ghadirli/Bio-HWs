@@ -1,14 +1,26 @@
-zero_connect = 5983
+import numpy as np
+
 limbs = []
 
 
+def initialize_matrix(npmatrix, matrix):
+    for i in range(len(matrix)):
+        for j in range(len(matrix[0])):
+            npmatrix[i][j] = matrix[i][j]
+
+
 def main():
-    matrix = []
+    input_matrix = []
     n = int(input())
     for i in range(n):
-        matrix.append([int(x) for x in input().split()])
-    calculate_limbs(matrix)
-    print(additive_phylogeny(matrix))
+        input_matrix.append([int(x) for x in input().split()])
+    matrix = np.zeros((n, n), dtype=np.int32)
+    initialize_matrix(matrix, input_matrix)
+    calculate_limbs(input_matrix)
+    edge, weight, _ = additive_phylogeny(matrix, n, n)
+    for i in sorted(edge):
+        for j in sorted(edge[i]):
+            print("%d->%d:%d" % (i, j, weight[(i, j)]))
 
 
 def limb(matrix, node):
@@ -27,23 +39,44 @@ def calculate_limbs(matrix):
         limbs.append(limb(matrix, i))
 
 
-def additive_phylogeny(matrix):
-    n = len(matrix)
+def additive_phylogeny(matrix, internal_nodes, n):
     if n == 2:
-        return [[0, matrix[0][1]], [matrix[0][1], 0]]
-    limb_length = limbs[n - 1]
+        return {1: [0], 0: [1]}, {(0, 1): matrix[0, 1], (1, 0): matrix[0, 1]}, internal_nodes
+    limb_length = limb(matrix, n - 1)
+    # reduce last row and last column
     for j in range(n - 1):
         matrix[j][n - 1] = matrix[j][n - 1] - limb_length
         matrix[n - 1][j] = matrix[j][n - 1]
-    i, k = finding_two_leaves(matrix, n - 1)
-    print("i and k are", i, k)
+
+    i, k = finding_two_leaves(matrix)
+    # print("i and k are", i, k)
     x = matrix[i][n - 1]
-    matrix = remove_last_col_and_row(matrix)
-    tree = additive_phylogeny(matrix)
-    v = find_node_with_distance_from_source(tree, i, k, x)
-    print("v is ", v, "matrix is ", matrix)
-    tree = add_node(tree, v, limb_length)
-    return tree
+
+    edges, weights, internal_nodes = additive_phylogeny(matrix[:-1, :-1], internal_nodes, n - 1)
+    # print("weight is ", weight)
+    i_near, k_near, i_x, n_x = find_path_in_tree(edges, weights, x, i, k)
+    new_node = i_near
+
+    if i_x != 0:
+        new_node = internal_nodes
+        internal_nodes += 1
+
+        edges[i_near].remove(k_near)
+        edges[k_near].remove(i_near)
+        edges[i_near].append(new_node)
+        edges[k_near].append(new_node)
+        edges[new_node] = [i_near, k_near]
+
+        weights[(new_node, i_near)] = weights[(i_near, new_node)] = i_x
+        weights[(new_node, k_near)] = weights[(k_near, new_node)] = n_x
+        del weights[(i_near, k_near)]
+        del weights[(k_near, i_near)]
+
+    edges[new_node].append(n - 1)
+    edges[n - 1] = [new_node]
+    weights[(n - 1, new_node)] = limb_length
+    weights[(new_node, n - 1)] = limb_length
+    return edges, weights, internal_nodes
 
 
 def get_neighbours(tree, node):
@@ -54,10 +87,11 @@ def get_neighbours(tree, node):
     return neighbours
 
 
-def find_path_in_tree(source, destination, tree):
+def find_path_in_tree(edge, weight, x, source, destination):
+    # print("weight is ", weight)
     queue = [[source]]
-    visited = set([source])
     my_path = []
+    visited = {source}
 
     while len(queue) > 0:
         path = queue.pop()
@@ -66,48 +100,23 @@ def find_path_in_tree(source, destination, tree):
         if node == destination:
             my_path = path
             break
-        for next_node in get_neighbours(tree, node):
+        for next_node in edge[node]:
             if next_node not in visited:
                 queue.append(path + [next_node])
-    return my_path
+    distance = 0
+    for k in range(len(my_path) - 1):
+        i, j = my_path[k], my_path[k + 1]
+        if distance + weight[(i, j)] > x:
+            return i, j, x - distance, distance + weight[(i, j)] - x
+        distance += weight[(i, j)]
 
 
-def find_node_with_distance_from_source(tree, source, destination, distance):
-    path = find_path_in_tree(source, destination, tree)
-    print("path is ", path)
-    cost = 0
-    for i in range(1, len(path)):
-        cost += tree[path[i - 1]][path[i]]
-        if cost == distance:
-            return path[i]
-
-
-def add_node(tree, v, limb_length):
-    for i in range(len(tree)):
-        tree[i].append(0)
-    tree.append([0] * len(tree[0]))
-    tree[len(tree) - 1][v] = limb_length
-    tree[v][len(tree) - 1] = limb_length
-
-    return tree
-
-
-def remove_last_col_and_row(matrix):
-    temp = []
-    for i in range(len(matrix) - 1):
-        temp.append([])
-        for j in range(len(matrix[0]) - 1):
-            temp[i].append(matrix[i][j])
-    return temp
-
-
-def finding_two_leaves(matrix, node):
-    length = len(matrix)
-    for i in range(length):
-        for k in range(length):
-            if i != node and k != node:
-                if matrix[i][k] == matrix[i][node] + matrix[k][node]:
-                    return i, k
+def finding_two_leaves(matrix):
+    length = matrix.shape[0]
+    for i in range(length - 1):
+        index = np.where(matrix[i] - matrix[-1] == matrix[i, -1])
+        if len(index[0]) > 0:
+            return index[0][0], i
 
 
 if __name__ == '__main__':
